@@ -1,66 +1,127 @@
-const express = require('express')
-const bodyParser = require('body-parser')
-const WebSocket = require('ws')
+'use strict'
+const topology = require('fully-connected-topology')
+const jsonStream = require('duplex-json-stream')
 const worker = require('./worker')
 
-const http_port = process.env.HTTP_PORT || 3001;
-const p2p_port = process.env.P2P_PORT || 6001;
-const initialPeers = process.env.PEERS ? process.env.PEERS.split(',') : [];
-
-let sockets = []
-
-const initHttpServer = () => {
-  const app = express()
-  app.use(bodyParser.json())
-
-  app.get('/blocks', (req, res) => res.send(JSON.stringify(worker.getBlockchain())))
-
-  app.post('/mineBlock', (req, res) => {
-      const newBlock = generateNextBlock(req.body.data)
-      addBlock(newBlock)
-      broadcast(responseLatestMsg())
-      console.log('block added: ' + JSON.stringify(newBlock))
-      res.send()
-  })
-
-  app.get('/peers', (req, res) => {
-      res.send(sockets.map(s => s._socket.remoteAddress + ':' + s._socket.remotePort))
-  })
-
-  app.post('/addPeer', (req, res) => {
-      connectToPeers([req.body.peer])
-      res.send()
-  })
-
-  app.listen(http_port, () => console.log('Listening http on port: ' + http_port))
+const MessageType = {
+  MESSAGE: 1,
+  QUERY_BLOCKCHAIN: 2,
+  BLOCKCHAIN_RESPONSE: 3,
+  PEER_STARTED_MINING: 4,
+  PEER_FINISHED_MINING: 5,
 }
 
-const initP2PServer = () => {
-  const server = new WebSocket.server({port: 5000})
-  server.on('connection', ws => initConnection(ws))
+const me = process.argv[2]
+let peers = []
+let swarm = {}
+
+const initP2PServer = async () => {
+  // const peers = await loadPeersFromFile()
+  const peers = ['localhost:5000', 'localhost:5001', 'localhost:5002', 'localhost:5003']
+  swarm = topology(me, peers)
+  initConnection(swarm)
 }
 
-const initConnection = (webSocket) => {
-  sockets.push(webSocket)
-  initMessageHandler(webSocket)
-}
-
-const initMessageHandler = (ws) => {
-  ws.on('message', data => {
-    console.log('received message', data)
+const initConnection = (swarm) => {
+  swarm.on('connection', (socket, id) => {
+    socket = jsonStream(socket)
+    initPeer(id, socket)
+    
+    socket.on('data', data => {
+      incomingMessageHandler(data, id)
+    })
   })
 }
 
-const write = (ws, message) => ws.send(JSON.stringify(message))
-const broadcast = (message) => sockets.forEach(socket => write(socket, message))
+
+process.stdin.on('data', data => {
+  const consoleInput = data.toString().trim()
+
+  if (consoleInput.startsWith('mine')) {
+    const blockData = consoleInput.split(':')[1]
+    console.log('Announced mining to other peers')
+    broadcast({
+      type: MessageType.PEER_STARTED_MINING,
+      data: blockData
+    })
+    // this will block the code
+    startMining(blockData)
+  } else {
+    broadcast({
+      type: MessageType.MESSAGE,
+      message: consoleInput
+    })
+
+  }
+})
 
 
-worker.generateNextBlock('test data for block 1')
+const initPeer = (id, socket) => {
+  swarm.add(id)
 
-// addBlock(generateNextBlock('test data for block 2'))
+  // check if peer has already been registered and refresh it with new socket
+  const existingPeerIndex = peers.findIndex(peer => peer.id === id)
+  if (existingPeerIndex > -1) {
+    peers.splice(existingPeerIndex, 1)
+  }
+  console.log('Adding new peer', id)
+  peers.push({ id, socket })
+}
 
-// addBlock(generateNextBlock('test data for block 3'))
 
-// console.log(worker.getBlockchain())
+const incomingMessageHandler = (data, id) => {
+  switch (data.type) {
+    case MessageType.MESSAGE:
+      console.log(id + '> ' + data.message)
+      break;
 
-initHttpServer()
+    case MessageType.PEER_STARTED_MINING:
+      console.log('Received command to start mining')
+      const blockData = data.data
+      startMining(blockData)
+      break;
+
+    case MessageType.PEER_FINISHED_MINING:
+      console.log('Received command to stop mining')
+      // stop mining and valdate new block
+      worker.validatePeerBlock(data.block)
+      break;
+
+    default:
+      break;
+  }
+}
+
+const startMining = (blockData) => {
+  console.log('Started mining...')
+
+  worker.generateNextBlock(blockData)
+  .then(newBlock => {
+    broadcastNewBlock(newBlock)
+  })
+  .catch(error => {
+    console.log('Error in Promise', error)
+  })
+}
+
+const broadcastNewBlock = (newBlock) => {
+  console.log('Announcing new block to peers')
+  broadcast({
+    type: MessageType.PEER_FINISHED_MINING,
+    block: newBlock
+  })
+}
+
+const write = (id, data) => {
+  const socket = peers.find(peer => peer.id === id).socket
+  if (socket) {
+    socket.write(data)
+  }
+}
+
+const broadcast = (data) => {
+  console.log('Broadcasting to peers', peers.map(peer => peer.id))
+  peers.forEach(peer => write(peer.id, data))
+}
+
+initP2PServer()

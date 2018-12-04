@@ -1,88 +1,63 @@
 const SHA256 = require("crypto-js/sha256");
-const difficulty = 4
+const spawn = require('threads').spawn;
+const { addBlock, getLatestBlock, blockchain } = require('./helper')
+const difficulty = 5
 
-class Block {
-  constructor(index, hash, previousHash, timestamp, data, difficulty, nonce) {
-    this.index = index
-    this.hash = hash
-    this.previousHash = previousHash
-    this.timestamp = timestamp
-    this.data = data
-    this.difficulty = difficulty
-    this.nonce = nonce
-  }
-}
-
-const calculateHash = (index, previousHash, timestamp, data, difficulty, nonce) => {
-  return SHA256(index.toString() + previousHash + timestamp.toString() + data + difficulty.toString() + nonce.toString()).toString()
-}
-
-const calculateHashForBlock = (block) => {
-  return calculateHash(block.index, block.previousHash, block.timestamp, block.data, block.difficulty, block.nonce)
-}
-
-const hashMatchesDifficulty = (hash, difficulty) => {
-  const requiredPrefix = '0'.repeat(difficulty)
-  return hash.startsWith(requiredPrefix)
-}
-
-const findBlock = (index, previousHash, timestamp, data, difficulty) => {
+const workerScript = function(input, callback) {
+  // Everything we do here will be run in parallel in another execution context.
+  // Remember that this function will be executed in the thread's context,
+  // so you cannot reference any value of the surrounding code.
+  const path = require('path')
+  const { index, previousHash, timestamp, data, difficulty, __dirname} = input
+  const { Block, calculateHash, hashMatchesDifficulty } = require(path.join(__dirname, '/helper.js'))
+  
   let nonce = 0
-
   while (true) {
     const hash = calculateHash(index, previousHash, timestamp, data, difficulty, nonce)
     if (hashMatchesDifficulty(hash, difficulty)) {
-      return new Block(index, hash, previousHash, timestamp, data, difficulty, nonce)
+      return callback(new Block(index, hash, previousHash, timestamp, data, difficulty, nonce))
     }
     nonce++
   }
 }
 
-const getGenesisBlock = () => {
-  const index = 0
-  const timestamp = new Date().getTime()
-  const data = 'Genesis block'
-  const previousHash = '0000000000000000000000000000000000000000000000000000000000000000'
 
-  return findBlock(index, previousHash, timestamp, data, difficulty)
-}
-
-let blockchain = [getGenesisBlock()]
-
-const getLatestBlock = () => {
-  return blockchain[blockchain.length - 1]
-}
-
-const addBlock = (newBlock) => {
-  if (isValidBlock(newBlock, getLatestBlock())) {
-    blockchain.push(newBlock)
-    return true
-  }
-  return false
-}
-
-const isValidBlock = (newBlock, previousBlock) => {
-  if (previousBlock.index + 1 !== newBlock.index) {
-    console.log('Invalid block index.')
-    return false
-  } else if (previousBlock.hash !== newBlock.previousHash) {
-    console.log('Invalid previous hash.')
-    return false
-  } else if (calculateHashForBlock(newBlock) !== newBlock.hash) {
-    console.log('Invalid hash.')
-    return false
-  }
-  return true
-}
-
+let minerThread
 module.exports.generateNextBlock = (blockData) => {
-  const previousBlock = getLatestBlock()
-  const nextIndex = previousBlock.index + 1
-  const nextTimestamp = new Date().getTime()
-  const previousHash = previousBlock.hash
+  return new Promise((resolve, reject) => {
+    const previousBlock = getLatestBlock()
+    const nextIndex = previousBlock.index + 1
+    const nextTimestamp = new Date().getTime()
+    const previousHash = previousBlock.hash
 
-  const newBlock = findBlock(nextIndex, previousHash, nextTimestamp, blockData, difficulty)
-  addBlock(newBlock)
+    minerThread = spawn(workerScript)
+    minerThread
+      .send({index: nextIndex, previousHash, timestamp: nextTimestamp, data: blockData, difficulty, __dirname})
+      // handlers
+      .on('message', function(newBlock) {
+        console.log('Finished working, response', newBlock)
+        addBlock(newBlock)
+        resolve(newBlock)
+        minerThread.kill();
+      })
+      .on('error', function(error) {
+        console.error('Worker errored:', error);
+        reject(error)
+      })
+      .on('exit', function() {
+        console.log('Worker has been terminated.');
+      });
+
+  })
+}
+
+module.exports.validatePeerBlock = (block) => {
+  // stop mining and validate block
+  minerThread.kill()
+  
+  const success = addBlock(block)
+  success ? console.log('Added new block successfully') : console.log('Invalid block.')
+  console.log('My blockchain', blockchain)
 }
 
 module.exports.getBlockchain = () => {

@@ -7,8 +7,9 @@
     {
       "type": "node",
       "request": "launch",
+      "args": ["localhost:5000"],
       "name": "Launch Program",
-      "program": "${workspaceFolder}/app.js"
+      "program": "${workspaceFolder}/src/app.js"
     }
   ]
 }

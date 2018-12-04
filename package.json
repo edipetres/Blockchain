@@ -20,7 +20,10 @@
   "dependencies": {
     "body-parser": "^1.18.3",
     "crypto-js": "^3.1.9-1",
+    "duplex-json-stream": "^1.0.1",
     "express": "^4.16.4",
+    "fully-connected-topology": "^1.1.1",
+    "threads": "^0.12.0",
     "ws": "^6.1.2"
   }
 }
