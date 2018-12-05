@@ -1,7 +1,7 @@
 'use strict'
 const topology = require('fully-connected-topology')
 const jsonStream = require('duplex-json-stream')
-const worker = require('./worker')
+const worker = require('./controller')
 
 const MessageType = {
   MESSAGE: 0,
