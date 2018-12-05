@@ -58,6 +58,15 @@ const isValidBlock = (newBlock, previousBlock) => {
   return true
 }
 
+const replaceBlockchain = (newBlockchain) => {
+  blockchain = newBlockchain
+  console.log('Updated to most common blockchain')
+}
+
+const getBlockchain = () => {
+  return blockchain
+}
+
 module.exports = {
   Block,
   isValidBlock, 
@@ -66,5 +75,7 @@ module.exports = {
   hashMatchesDifficulty, 
   calculateHashForBlock, 
   calculateHash,
-  blockchain
+  blockchain,
+  replaceBlockchain,
+  getBlockchain
 }

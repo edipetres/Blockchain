@@ -1,6 +1,6 @@
 const SHA256 = require("crypto-js/sha256");
 const spawn = require('threads').spawn;
-const { addBlock, getLatestBlock, blockchain } = require('./helper')
+const { addBlock, getLatestBlock, replaceBlockchain, getBlockchain } = require('./helper')
 const difficulty = 5
 
 const workerScript = function(input, callback) {
@@ -57,9 +57,50 @@ module.exports.validatePeerBlock = (block) => {
   
   const success = addBlock(block)
   success ? console.log('Added new block successfully') : console.log('Invalid block.')
-  console.log('My blockchain', blockchain)
+  console.log('My blockchain', getBlockchain())
 }
 
 module.exports.getBlockchain = () => {
-  return blockchain
+  return getBlockchain()
+}
+
+let blockchainStore = []
+// each peer that connects sends their blockchain
+// overwrite blockchain each time we have X confirmations
+// each new connecting peer above the required confirmation count will trigger the possible update of the blockchain
+module.exports.initBlockchain = (peerBlockchain, peerCount) => {
+  const requiredConfirmations = 2
+  blockchainStore.push(peerBlockchain)
+
+  if (blockchainStore.length >= requiredConfirmations) {
+    // compare the blockchains we have
+    validateBlockchains(blockchainStore)
+  }
+}
+
+const validateBlockchains = (blockchainStore) => {
+  let latestHashes = {}
+  // add the hash of the last block from every incoming blockchain sent by peers
+  for (let i = 0; i < blockchainStore.length; i++) {
+    const peerBlockchain = blockchainStore[i];
+    const lastBlock = peerBlockchain[peerBlockchain.length - 1]
+    const peerHash = lastBlock.hash
+
+    // increase hash count
+    latestHashes[peerHash] ? latestHashes[peerHash]++ : latestHashes[peerHash] = 1
+  }
+  // find the most common hash, and copy that blockchain to this node
+  hashesSorted = Object.keys(latestHashes).sort(function(a,b){return latestHashes[b]-latestHashes[a]})
+  const mostCommonHash = hashesSorted[0]
+  const mostCommonBlockchain = getBlockchainBy(blockchainStore, mostCommonHash)
+  
+  // copy most common blockchain of peers to this node's copy of the blockchain
+  replaceBlockchain(mostCommonBlockchain)
+}
+
+const getBlockchainBy = (blockchainStore, targetHash) => {
+  return blockchainStore.find(blockchain => {
+    const lastBlocksHash = blockchain[blockchain.length - 1].hash
+    return lastBlocksHash === targetHash
+  })
 }

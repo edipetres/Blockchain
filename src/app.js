@@ -4,11 +4,10 @@ const jsonStream = require('duplex-json-stream')
 const worker = require('./worker')
 
 const MessageType = {
-  MESSAGE: 1,
-  QUERY_BLOCKCHAIN: 2,
-  BLOCKCHAIN_RESPONSE: 3,
-  PEER_STARTED_MINING: 4,
-  PEER_FINISHED_MINING: 5,
+  MESSAGE: 0,
+  BLOCKCHAIN: 1,
+  PEER_STARTED_MINING: 2,
+  PEER_FINISHED_MINING: 3,
 }
 
 const me = process.argv[2]
@@ -46,12 +45,13 @@ process.stdin.on('data', data => {
     })
     // this will block the code
     startMining(blockData)
+  } else if (consoleInput.startsWith('blockchain')) {
+    console.log(worker.getBlockchain())
   } else {
     broadcast({
       type: MessageType.MESSAGE,
       message: consoleInput
     })
-
   }
 })
 
@@ -66,6 +66,15 @@ const initPeer = (id, socket) => {
   }
   console.log('Adding new peer', id)
   peers.push({ id, socket })
+
+  // send this node's blockchain if it contains any data
+  const blockchain = worker.getBlockchain()
+  if (blockchain.length > 1) {
+    socket.write({
+      type: MessageType.BLOCKCHAIN,
+      data: blockchain
+    })
+  }
 }
 
 
@@ -73,6 +82,11 @@ const incomingMessageHandler = (data, id) => {
   switch (data.type) {
     case MessageType.MESSAGE:
       console.log(id + '> ' + data.message)
+      break;
+
+    case MessageType.BLOCKCHAIN:
+      const blockchain = data.data
+      worker.initBlockchain(blockchain, swarm.connections.length)
       break;
 
     case MessageType.PEER_STARTED_MINING:
