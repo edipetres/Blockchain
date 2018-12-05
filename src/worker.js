@@ -3,7 +3,7 @@ const spawn = require('threads').spawn;
 const { addBlock, getLatestBlock, replaceBlockchain, getBlockchain } = require('./helper')
 const difficulty = 5
 
-const workerScript = function(input, callback) {
+const workerScript = function(input, done) {
   // Everything we do here will be run in parallel in another execution context.
   // Remember that this function will be executed in the thread's context,
   // so you cannot reference any value of the surrounding code.
@@ -15,7 +15,7 @@ const workerScript = function(input, callback) {
   while (true) {
     const hash = calculateHash(index, previousHash, timestamp, data, difficulty, nonce)
     if (hashMatchesDifficulty(hash, difficulty)) {
-      return callback(new Block(index, hash, previousHash, timestamp, data, difficulty, nonce))
+      return done(new Block(index, hash, previousHash, timestamp, data, difficulty, nonce))
     }
     nonce++
   }
@@ -52,9 +52,10 @@ module.exports.generateNextBlock = (blockData) => {
 }
 
 module.exports.validatePeerBlock = (block) => {
-  // stop mining and validate block
+  // stop mining
   minerThread.kill()
   
+  // validate block
   const success = addBlock(block)
   success ? console.log('Added new block successfully') : console.log('Invalid block.')
   console.log('My blockchain', getBlockchain())
