@@ -1,12 +1,8 @@
-# Blockchain Project
-
-Link to project description [here](https://github.com/datsoftlyngby/soft2018fall-si-teaching-material/blob/master/Slides/12-Blockchain_Intro.ipynb)
+# Minimal Blockchain Project
 
 ## Process flow chart
 
 ![chart](docs/flow-chart.png)
-
-# Minimal Blockchain Project
 
 The projects implements a minimal viable blockchain technology in Node.js. It is based on the fundamentals of Bitcoin where peers connect to each other and mine in a race to create the next block in the blockchain.
 
@@ -93,3 +89,7 @@ When a new node connects to the network each peers sends their version of the bl
 ### Threads
 
 The logic of the mining process is executed on a separate thread. This is necessary for the p2p connection to keep actively listening as long as the while loop is blocking the event loop. 
+
+## Other
+
+> Link to project description [here](https://github.com/datsoftlyngby/soft2018fall-si-teaching-material/blob/master/Slides/12-Blockchain_Intro.ipynb)
