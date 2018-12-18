@@ -2,9 +2,9 @@
 
 ## Process flow chart
 
-![chart](docs/flow-chart.png)
-
 The projects implements a minimal viable blockchain technology in Node.js. It is based on the fundamentals of Bitcoin where peers connect to each other and mine in a race to create the next block in the blockchain.
+
+![chart](docs/flow-chart.png)
 
 ## Get started
 
